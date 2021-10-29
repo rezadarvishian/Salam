@@ -3,14 +3,18 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
+        <entry key="..\:/APK/Salam/app/src/main/res/drawable/edit_login_selector.xml" value="0.21145833333333333" />
         <entry key="..\:/APK/Salam/app/src/main/res/drawable/ic_admin.xml" value="0.22552083333333334" />
         <entry key="..\:/APK/Salam/app/src/main/res/layout/activity_chat.xml" value="0.209375" />
         <entry key="..\:/APK/Salam/app/src/main/res/layout/activity_main.xml" value="0.14074074074074075" />
+        <entry key="..\:/APK/Salam/app/src/main/res/layout/activity_splash.xml" value="0.209375" />
         <entry key="..\:/APK/Salam/app/src/main/res/layout/fragment_fast.xml" value="0.14074074074074075" />
         <entry key="..\:/APK/Salam/app/src/main/res/layout/fragment_security.xml" value="0.14074074074074075" />
         <entry key="..\:/APK/Salam/app/src/main/res/layout/fragment_strong.xml" value="0.14074074074074075" />
+        <entry key="..\:/APK/Salam/app/src/main/res/layout/main_toolbar.xml" value="0.209375" />
         <entry key="..\:/APK/Salam/app/src/main/res/layout/others_messages_item.xml" value="0.209375" />
         <entry key="..\:/APK/Salam/app/src/main/res/layout/own_messages_item.xml" value="0.209375" />
+        <entry key="..\:/APK/Salam/app/src/main/res/layout/text_message_layout.xml" value="0.209375" />
       </map>
     </option>
   </component>

@@ -1,242 +1,274 @@
-package ir.vira.salam;
+package ir.vira.salam
 
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
+import android.content.DialogInterface
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Bundle
+import android.os.PersistableBundle
+import android.provider.MediaStore
+import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
+import dagger.hilt.android.AndroidEntryPoint
+import ir.vira.network.NetworkInformation
+import ir.vira.salam.Contracts.MessageContract
+import ir.vira.salam.Contracts.UserContract
+import ir.vira.salam.DesignPatterns.Factory.RepositoryFactory
+import ir.vira.salam.DesignPatterns.Factory.ThreadFactory
+import ir.vira.salam.Enumerations.RepositoryType
+import ir.vira.salam.Enumerations.ThreadType
+import ir.vira.salam.Models.JoinRequest
+import ir.vira.salam.Models.MessageModel
+import ir.vira.salam.Models.UserModel
+import ir.vira.salam.Sockets.ErrorSocketListener
+import ir.vira.salam.Sockets.SocketListener
+import ir.vira.salam.Threads.ConnectToServerThread
+import ir.vira.salam.Utiles.*
+import ir.vira.salam.Utiles.ConstVal.IS_ADMIN
+import ir.vira.salam.core.BaseActivity
+import ir.vira.salam.databinding.MainActivityBinding
+import ir.vira.salam.viewModel.MainViewModel
+import ir.vira.utils.*
+import ir.vira.utils.Cipher.decryptData
+import ir.vira.utils.Cipher.encryptData
+import ir.vira.utils.SecretKey.generateKey
+import kotlinx.coroutines.flow.onEach
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.io.IOException
+import java.lang.Exception
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.ArrayList
+import javax.crypto.SecretKey
+import javax.crypto.spec.SecretKeySpec
 
-import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.os.Bundle;
-import android.provider.MediaStore;
-import android.util.Log;
-import android.util.TypedValue;
-import android.view.Menu;
-import android.view.View;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.TextView;
-import android.widget.Toast;
+@AndroidEntryPoint
+class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
 
-import org.json.JSONArray;
-import org.json.JSONObject;
+    private val viewModel: MainViewModel by viewModels()
+    private lateinit var networkInformation: NetworkInformation
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetEncoder;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
+    override fun onCreate(savedInstanceState: Bundle?, persistentState: PersistableBundle?) {
+        super.onCreate(savedInstanceState, persistentState)
+        observeViewModel()
+        networkInformation = NetworkInformation(this)
+        binding.mainEditIP.setText(networkInformation.ipAddress)
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-
-import de.hdodenhof.circleimageview.CircleImageView;
-import ir.vira.network.NetworkInformation;
-import ir.vira.salam.Contracts.MessageContract;
-import ir.vira.salam.Contracts.UserContract;
-import ir.vira.salam.DesignPatterns.Factory.RepositoryFactory;
-import ir.vira.salam.DesignPatterns.Factory.ThreadFactory;
-import ir.vira.salam.Enumerations.RepositoryType;
-import ir.vira.salam.Enumerations.ThreadType;
-import ir.vira.salam.Models.MessageModel;
-import ir.vira.salam.Models.UserModel;
-import ir.vira.salam.Repositories.UserRepository;
-import ir.vira.salam.Sockets.ErrorSocketListener;
-import ir.vira.salam.Sockets.SocketListener;
-import ir.vira.salam.Threads.ConnectToServerThread;
-import ir.vira.utils.AdvancedToast;
-import ir.vira.utils.EncryptionAlgorithm;
-import ir.vira.utils.Utils;
-
-public class MainActivity extends AppCompatActivity {
-
-    private CircleImageView circleImageView;
-    private EditText editTextName, editTextIpAddress;
-    private TextView textViewProfile;
-    private Button btnSendRequest;
-    private SharedPreferences sharedPreferences;
-    private Utils utils;
-    private Bitmap profile;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        initializeViews();
-        utils = Utils.getInstance(this);
-        sharedPreferences = getSharedPreferences(getString(R.string.shared_name), Context.MODE_PRIVATE);
-        if (sharedPreferences.contains(getString(R.string.shared_key_profile))) {
-            profile = Utils.getBitmap(sharedPreferences.getString(getString(R.string.shared_key_profile), ""));
-            circleImageView.setImageBitmap(profile);
-            textViewProfile.setVisibility(View.INVISIBLE);
-        }
-
-        if (sharedPreferences.contains(getString(R.string.shared_key_username))) {
-            String username = sharedPreferences.getString(getString(R.string.shared_key_username), "");
-            editTextName.setText(username);
-        }
-        NetworkInformation networkInformation = new NetworkInformation(this);
-        editTextIpAddress.setText(networkInformation.getServerIpAddress());
-        circleImageView.setOnClickListener(v -> {
-            AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
-            alertDialog.setItems(R.array.item_name, (dialog, position) -> {
-                switch (position) {
-                    case 0:
-                        utils.chooseImageFromGallery(this, getResources().getInteger(R.integer.chooseImageFromGallery));
-                        break;
-                    case 1:
-                        utils.takeImage(this, getResources().getInteger(R.integer.takeImage));
-                        break;
+        binding.mainImageProfile.setOnClickListener {
+            val alertDialog = AlertDialog.Builder(this)
+            alertDialog.setItems(R.array.item_name) { _: DialogInterface?, position: Int ->
+                when (position) {
+                    0 -> chooseImageFromGallery(resources.getInteger(R.integer.chooseImageFromGallery))
+                    1 -> takeImage(resources.getInteger(R.integer.takeImage))
                 }
-            });
-            alertDialog.show();
-        });
-        btnSendRequest.setOnClickListener((view) -> {
-            if (editTextName.length() == 0)
-                editTextName.setError("لطفا نامی برای خود وارد کنید.");
-            else if (profile == null)
-                AdvancedToast.makeText(this, "شما باید یک پروفایل انتخاب کنید !", Toast.LENGTH_LONG, "fonts/iran_sans.ttf").show();
-            else {
-                sharedPreferences.edit().putString(getString(R.string.shared_key_username), editTextName.getText().toString()).commit();
-                btnSendRequest.setVisibility(View.INVISIBLE);
-                Thread thread = ThreadFactory.getThread(ThreadType.CONNECT_TO_SERVER);
+            }.show()
+        }
 
-                SocketListener socketListener = socket -> {
-                    if (socket.isConnected()) {
-                        try {
-                            JSONObject jsonObject = new JSONObject();
-                            jsonObject.put("event", "JOIN");
-                            jsonObject.put("ip", Utils.encodeToString(Utils.encryptData(networkInformation.getIpAddress(), EncryptionAlgorithm.AES)));
-                            jsonObject.put("name", Utils.encodeToString(Utils.encryptData(editTextName.getText().toString(), EncryptionAlgorithm.AES)));
-                            jsonObject.put("secretKey", Utils.encodeToString(utils.generateKey(EncryptionAlgorithm.AES).getEncoded()));
-                            float ratio = (float) profile.getWidth() / profile.getHeight();
-                            if (ratio > 1 || ratio < 1)
-                                jsonObject.put("profile", Utils.getEncodeImage(Bitmap.createScaledBitmap(profile, 100, (int) (100 / ratio), true)));
-                            else
-                                jsonObject.put("profile", Utils.getEncodeImage(Bitmap.createScaledBitmap(profile, 100, 100, true)));
-                            DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream());
-                            dataOutputStream.writeUTF(jsonObject.toString());
-                            dataOutputStream.flush();
-                            dataOutputStream.close();
-                            socket.close();
-                            ServerSocket serverSocket = new ServerSocket(getResources().getInteger(R.integer.portNumber));
-                            Socket socketReceived = serverSocket.accept();
-                            DataInputStream dataInputStream = new DataInputStream(socketReceived.getInputStream());
-                            jsonObject = new JSONObject(dataInputStream.readUTF());
-                            dataInputStream.close();
-                            socketReceived.close();
-                            serverSocket.close();
-                            if (jsonObject.getString("requestStatus").equals("accept")) {
-                                UserContract userContract = (UserContract) RepositoryFactory.getRepository(RepositoryType.USER_REPO);
-                                MessageContract messageContract = (MessageContract) RepositoryFactory.getRepository(RepositoryType.MESSAGE_REPO);
-                                List<UserModel> userModels = new ArrayList<>();
-                                List<MessageModel> messageModels = new ArrayList<>();
-                                JSONArray jsonArrayUsers = jsonObject.getJSONArray("users");
-                                JSONArray jsonArrayMessages = jsonObject.getJSONArray("messages");
-                                SecretKey secretKey;
-                                byte[] decodedKey;
-                                decodedKey = Utils.decodeToByte(jsonObject.getString("secretKey"));
-                                secretKey = new SecretKeySpec(decodedKey, EncryptionAlgorithm.AES.name());
-                                String ip, name;
-                                byte[] prof;
-                                for (int i = 0; i < jsonArrayUsers.length(); i++) {
-                                    ip = Utils.decryptData(Utils.decodeToByte(jsonArrayUsers.getJSONObject(i).getString("ip")), secretKey, EncryptionAlgorithm.AES);
-                                    name = Utils.decryptData(Utils.decodeToByte(jsonArrayUsers.getJSONObject(i).getString("name")), secretKey, EncryptionAlgorithm.AES);
-                                    prof = Utils.decodeToByte(jsonArrayUsers.getJSONObject(i).getString("profile"));
-                                    Bitmap profile = BitmapFactory.decodeByteArray(prof, 0, prof.length);
-                                    SecretKey secretKeyForUser = new SecretKeySpec(Utils.decodeToByte(jsonArrayUsers.getJSONObject(i).getString("secretKey")), EncryptionAlgorithm.AES.name());
-                                    UserModel userModel = new UserModel(ip, name, profile, secretKeyForUser);
-                                    userModels.add(userModel);
-                                }
-                                userContract.addAll(userModels);
-                                String text;
-                                for (int i = 0; i < jsonArrayMessages.length(); i++) {
-                                    ip = Utils.decryptData(Utils.decodeToByte(jsonArrayMessages.getJSONObject(i).getString("ip")), secretKey, EncryptionAlgorithm.AES);
-                                    text = Utils.decryptData(Utils.decodeToByte(jsonArrayMessages.getJSONObject(i).getString("text")), secretKey, EncryptionAlgorithm.AES);
-                                    MessageModel messageModel = new MessageModel(userContract.findUserByIP(ip), text);
-                                    messageModels.add(messageModel);
-                                }
-                                messageContract.addAll(messageModels);
-                                startActivity(new Intent(this, ChatActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK).putExtra("isAdmin", false));
-                            } else {
-                                runOnUiThread(() -> {
-                                    btnSendRequest.setVisibility(View.VISIBLE);
-                                    AdvancedToast.makeText(MainActivity.this, getResources().getString(R.string.msg_admin_did_not_allowed), Toast.LENGTH_LONG, "fonts/iran_sans.ttf").show();
-                                });
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    } else {
-                        btnSendRequest.setVisibility(View.VISIBLE);
-                        AdvancedToast.makeText(MainActivity.this, getString(R.string.problem_in_connect_to_admin), Toast.LENGTH_LONG, "fonts/iran_sans.ttf").show();
-                    }
-                };
-                ErrorSocketListener errorSocketListener = message -> {
-                    runOnUiThread(() -> {
-                        btnSendRequest.setVisibility(View.VISIBLE);
-                        AdvancedToast.makeText(this, getResources().getString(R.string.problem_in_connect_to_admin), Toast.LENGTH_LONG, "fonts/iran_sans.ttf").show();
-                    });
-                };
-                ((ConnectToServerThread) thread).setupConnection(networkInformation.getServerIpAddress(), getResources().getInteger(R.integer.portNumber), this, socketListener, errorSocketListener);
-                thread.setPriority(Thread.MAX_PRIORITY);
-                thread.start();
-            }
-        });
+        binding.mainBtnSendRequest.setOnClickListener {
+            if (validateUserInputData()) sendRequest()
+        }
+
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == getResources().getInteger(R.integer.chooseImageFromGallery) && data != null) {
-            try {
-                profile = MediaStore.Images.Media.getBitmap(getContentResolver(), data.getData());
-                circleImageView.setImageURI(data.getData());
-                textViewProfile.setVisibility(View.INVISIBLE);
-                putProfileInSharedPreferences(profile);
-            } catch (IOException e) {
-                e.printStackTrace();
+    private fun observeViewModel() {
+
+        viewModel.profile.onEach {
+            if (it.isNotBlank()) {
+                binding.mainImageProfile.setImageBitmap(it.getBitmap())
+                binding.mainTextProfile.setInvisible()
             }
-        } else if (requestCode == getResources().getInteger(R.integer.takeImage) && data != null) {
-            try {
-                profile = MediaStore.Images.Media.getBitmap(getContentResolver(), Utils.getTempImage());
-                circleImageView.setImageBitmap(profile);
-                putProfileInSharedPreferences(profile);
-                textViewProfile.setVisibility(View.INVISIBLE);
-            } catch (IOException e) {
-                e.printStackTrace();
+        }.observeInLifecycle(this)
+
+        viewModel.profile.onEach {
+            if (it.isNotBlank()) binding.mainEditName.setText(it)
+        }.observeInLifecycle(this)
+
+    }
+
+    private fun validateUserInputData(): Boolean {
+
+        if (binding.mainEditName.text.trim().toString().isBlank()) {
+            binding.mainEditName.error = "لطفا نامی برای خود وارد کنید."
+            return false
+        }
+
+        if (binding.mainImageProfile.drawable == null) {
+            showToast("شما باید یک پروفایل انتخاب کنید !")
+            return false
+        }
+
+        viewModel.saveUserName(binding.mainEditName.trimString())
+
+        return true
+    }
+
+
+    private fun sendRequest() {
+        binding.mainBtnSendRequest.setInvisible()
+
+        val thread = ThreadFactory.getThread(ThreadType.CONNECT_TO_SERVER)
+
+        val socketListener = SocketListener { socket: Socket ->
+            if (socket.isConnected) {
+                try {
+
+                    val encryptedIp = networkInformation.ipAddress.encryptData( EncryptionAlgorithm.AES)?.encodeToString()
+                    val encryptedName = binding.mainEditName.trimString().encryptData( EncryptionAlgorithm.AES)?.encodeToString()
+                    val encryptedSecretKey = generateKey(EncryptionAlgorithm.AES)?.encoded?.encodeToString()
+
+                    if (encryptedIp==null||encryptedName==null||encryptedSecretKey==null){
+                        showToast("در رمزنگاری اطلاعات مشکلی به وجود آمد لطفا برنامه را ببنید و دوباره باز کنید")
+                        return@SocketListener
+                    }
+
+
+                    val joinRequest = JoinRequest(
+                        event = "JOIN",
+                        ip = encryptedIp,
+                        name = encryptedName,
+                        secretKey = encryptedSecretKey,
+                        profile = viewModel.userProfile()
+                    )
+
+                    val dataOutputStream = DataOutputStream(socket.getOutputStream())
+                    dataOutputStream.writeUTF(joinRequest.toString())
+                    dataOutputStream.flush()
+                    dataOutputStream.close()
+                    socket.close()
+                    val serverSocket = ServerSocket(resources.getInteger(R.integer.portNumber))
+                    val socketReceived = serverSocket.accept()
+                    val dataInputStream = DataInputStream(socketReceived.getInputStream())
+                    val jsonObject = JSONObject(dataInputStream.readUTF())
+                    dataInputStream.close()
+                    socketReceived.close()
+                    serverSocket.close()
+                    if (jsonObject.getString("requestStatus") == "accept") {
+                        val userContract: UserContract = RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
+                        val messageContract: MessageContract = RepositoryFactory.getRepository(RepositoryType.MESSAGE_REPO) as MessageContract
+                        val userModels: MutableList<UserModel> = ArrayList<UserModel>()
+                        val messageModels: MutableList<MessageModel> = ArrayList<MessageModel>()
+                        val jsonArrayUsers: JSONArray = jsonObject.getJSONArray("users")
+                        val jsonArrayMessages: JSONArray = jsonObject.getJSONArray("messages")
+                        val decodedKey = jsonObject.getString("secretKey").decodeToByte()
+                        val secretKey=SecretKeySpec(decodedKey, EncryptionAlgorithm.AES.name)
+
+
+                        for (i in 0 until jsonArrayUsers.length()) {
+
+                            val decodedIp = jsonArrayUsers.getJSONObject(i).getString("ip").decodeToByte()
+                            val ip = secretKey.decryptData(decodedIp,EncryptionAlgorithm.AES)
+
+                            val decodedName = jsonArrayUsers.getJSONObject(i).getString("name").decodeToByte()
+                            val name = secretKey.decryptData(decodedName,EncryptionAlgorithm.AES)
+
+                            val decodedProf = jsonArrayUsers.getJSONObject(i).getString("profile").decodeToByte()
+                            val profile = BitmapFactory.decodeByteArray(decodedProf, 0, decodedProf.size)
+
+                            val secretKeyForUser = SecretKeySpec(jsonArrayUsers.getJSONObject(i).getString("secretKey").decodeToByte(), EncryptionAlgorithm.AES.name)
+
+                            val userModel = UserModel(ip!!, name!!, profile, secretKeyForUser)
+
+                            userModels.add(userModel)
+                        }
+                        userContract.addAll(userModels)
+
+                        for (i in 0 until jsonArrayMessages.length()) {
+
+                            val decodedIp = jsonArrayUsers.getJSONObject(i).getString("ip").decodeToByte()
+                            val ip = secretKey.decryptData(decodedIp,EncryptionAlgorithm.AES)
+
+                            val decodedText = jsonArrayUsers.getJSONObject(i).getString("text").decodeToByte()
+                            val text = secretKey.decryptData(decodedText,EncryptionAlgorithm.AES)
+
+                            val messageModel = MessageModel(userContract.findUserByIP(ip), text)
+                            messageModels.add(messageModel)
+                        }
+
+                        messageContract.addAll(messageModels)
+
+                        val intent = Intent(this,ChatActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        intent.putExtra(IS_ADMIN,false)
+                        startActivity(intent)
+
+                    } else {
+                        doOnUiThread {
+                           binding.mainBtnSendRequest.setVisible()
+                           showToast(resources.getString(R.string.msg_admin_did_not_allowed))
+                       }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            } else {
+                binding.mainBtnSendRequest.setVisible()
+                showToast(resources.getString(R.string.problem_in_connect_to_admin))
             }
         }
+
+
+
+        val errorSocketListener = ErrorSocketListener { message: String? ->
+            doOnUiThread {
+                binding.mainBtnSendRequest.setVisible()
+                showToast(resources.getString(R.string.problem_in_connect_to_admin))
+            }
+        }
+
+        (thread as ConnectToServerThread).setupConnection(
+            networkInformation.serverIpAddress,
+            resources.getInteger(R.integer.portNumber),
+            this,
+            socketListener,
+            errorSocketListener
+        )
+        thread.priority = Thread.MAX_PRIORITY
+        thread.start()
+
     }
 
-    void putProfileInSharedPreferences(Bitmap bitmap) {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 20, byteArrayOutputStream);
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inSampleSize = 2;
-        options.inPurgeable = true;
-        bitmap = BitmapFactory.decodeByteArray(byteArrayOutputStream.toByteArray(), 0, byteArrayOutputStream.toByteArray().length, options);
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(getString(R.string.shared_key_profile), utils.getEncodeImage(bitmap));
-        editor.commit();
+override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    if (requestCode == getResources().getInteger(R.integer.chooseImageFromGallery) && data != null) {
+        try {
+            val profile = MediaStore.Images.Media.getBitmap(contentResolver, data.data)
+            binding.mainImageProfile.setImageURI(data.data)
+            binding.mainTextProfile.setInvisible()
+            putProfileInSharedPreferences(profile)
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    } else if (requestCode == getResources().getInteger(R.integer.takeImage) && data != null) {
+        try {
+            //  val profile = MediaStore.Images.Media.getBitmap(contentResolver, getTempImage())
+            val profile = MediaStore.Images.Media.getBitmap(contentResolver, data.data)
+            binding.mainImageProfile.setImageURI(data.data)
+            binding.mainTextProfile.setInvisible()
+            putProfileInSharedPreferences(profile)
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
     }
+}
 
-    private void initializeViews() {
-        circleImageView = findViewById(R.id.mainImageProfile);
-        textViewProfile = findViewById(R.id.mainTextProfile);
-        editTextName = findViewById(R.id.mainEditName);
-        editTextIpAddress = findViewById(R.id.mainEditIP);
-        btnSendRequest = findViewById(R.id.mainBtnSendRequest);
-    }
+private fun putProfileInSharedPreferences(bitmap: Bitmap) {
+    var bitmapImage: Bitmap = bitmap
+    val byteArrayOutputStream = ByteArrayOutputStream()
+    bitmapImage.compress(Bitmap.CompressFormat.JPEG, 20, byteArrayOutputStream)
+    val options: BitmapFactory.Options = BitmapFactory.Options()
+    options.inSampleSize = 2
+    options.inPurgeable = true
+    bitmapImage = BitmapFactory.decodeByteArray(
+        byteArrayOutputStream.toByteArray(),
+        0,
+        byteArrayOutputStream.toByteArray().size,
+        options
+    )
+    viewModel.saveUserImage(bitmapImage.getEncodeImage())
+}
+
 }

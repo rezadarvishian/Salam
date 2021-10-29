@@ -1,38 +1,36 @@
-package ir.vira.salam.Repositories;
+package ir.vira.salam.Repositories
 
-import java.util.ArrayList;
-import java.util.List;
 
-import ir.vira.salam.Contracts.MessageContract;
-import ir.vira.salam.Models.MessageModel;
+import ir.vira.salam.Contracts.MessageContract
+import ir.vira.salam.Models.MessageModel
+import java.util.ArrayList
 
-public class MessageRepository implements MessageContract {
+class MessageRepository : MessageContract {
 
-    private List<MessageModel> messageModels;
-    private static MessageRepository messageRepository;
 
-    private MessageRepository() {
-        messageModels = new ArrayList<>();
+    private val messageModels: MutableList<MessageModel>
+
+    override fun addAll(items: List<MessageModel>?) {
+        messageModels.addAll(items!!)
     }
 
-    public static MessageRepository getInstance() {
-        if (messageRepository == null)
-            messageRepository = new MessageRepository();
-        return messageRepository;
+    override fun add(item: MessageModel) {
+        messageModels.add(item)
     }
 
-    @Override
-    public void addAll(List<MessageModel> items) {
-        messageModels.addAll(items);
+    override val all: List<MessageModel>
+        get() = messageModels
+
+    companion object {
+        private var messageRepository: MessageRepository? = null
+        val instance: MessageRepository?
+            get() {
+                if (messageRepository == null) messageRepository = MessageRepository()
+                return messageRepository
+            }
     }
 
-    @Override
-    public void add(MessageModel item) {
-        messageModels.add(item);
-    }
-
-    @Override
-    public List<MessageModel> getAll() {
-        return messageModels;
+    init {
+        messageModels = ArrayList()
     }
 }

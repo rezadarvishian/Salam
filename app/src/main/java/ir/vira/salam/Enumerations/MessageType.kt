@@ -1,6 +1,5 @@
-package ir.vira.salam.Enumerations;
+package ir.vira.salam.Enumerations
 
-public enum MessageType {
-    OWN,
-    OTHER;
+enum class MessageType {
+    OWN, OTHER
 }

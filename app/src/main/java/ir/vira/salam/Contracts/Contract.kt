@@ -1,11 +1,7 @@
-package ir.vira.salam.Contracts;
+package ir.vira.salam.Contracts
 
-import java.util.List;
-
-public interface Contract<T> {
-    void addAll(List<T> items);
-
-    void add(T item);
-
-    List<T> getAll();
+interface Contract<T> {
+    fun addAll(items: List<T>?)
+    fun add(item: T)
+    val all: List<T>
 }

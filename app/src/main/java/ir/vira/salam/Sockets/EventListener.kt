@@ -1,5 +1,3 @@
-package ir.vira.salam.Sockets;
+package ir.vira.salam.Sockets
 
-public interface EventListener {
-
-}
+interface EventListener 

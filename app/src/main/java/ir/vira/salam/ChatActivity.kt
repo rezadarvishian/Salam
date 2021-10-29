@@ -1,144 +1,136 @@
-package ir.vira.salam;
+package ir.vira.salam
 
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import android.os.Bundle
+import android.os.PersistableBundle
+import androidx.recyclerview.widget.LinearLayoutManager
+import ir.vira.network.NetworkInformation
+import ir.vira.salam.Adapters.ChatRecyclerAdapter
+import ir.vira.salam.Contracts.MessageContract
+import ir.vira.salam.Contracts.UserContract
+import ir.vira.salam.DesignPatterns.Factory.RepositoryFactory
+import ir.vira.salam.DesignPatterns.Factory.ThreadFactory
+import ir.vira.salam.Enumerations.EventType
+import ir.vira.salam.Enumerations.RepositoryType
+import ir.vira.salam.Enumerations.ThreadType
+import ir.vira.salam.Models.MessageModel
+import ir.vira.salam.Models.UserModel
+import ir.vira.salam.Notifications.JoinNotification
+import ir.vira.salam.Repositories.MessageRepository
+import ir.vira.salam.Sockets.JoinEventListener
+import ir.vira.salam.Sockets.NewMsgEventListener
+import ir.vira.salam.Threads.ReceiveEventsThread
+import ir.vira.salam.Threads.SendEventsThread
+import ir.vira.salam.Utiles.ConstVal.IS_ADMIN
+import ir.vira.salam.Utiles.doOnUiThread
+import ir.vira.salam.Utiles.trimString
+import ir.vira.salam.core.BaseActivity
+import ir.vira.salam.databinding.ChatActivityBinding
+import ir.vira.utils.EncryptionAlgorithm
+import ir.vira.utils.SecretKey.generateKey
+import ir.vira.utils.getBitmap
+import ir.vira.utils.toPersian
+import java.io.IOException
 
-import android.app.Activity;
-import android.graphics.Bitmap;
-import android.media.MediaPlayer;
-import android.media.RingtoneManager;
-import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ImageView;
-import android.widget.TextView;
-import android.widget.Toast;
+class ChatActivity : BaseActivity<ChatActivityBinding>(R.layout.activity_chat) {
 
-import org.json.JSONException;
-import org.json.JSONObject;
 
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.net.Socket;
-import java.net.UnknownHostException;
+    private lateinit var receiverThread: ReceiveEventsThread
+    private lateinit var senderThread: SendEventsThread
+    private lateinit var userContract: UserContract
+    private var joinEventListener: JoinEventListener? = null
+    private lateinit var chatRecyclerAdapter: ChatRecyclerAdapter
 
-import ir.vira.network.NetworkInformation;
-import ir.vira.salam.Adapters.ChatRecyclerAdapter;
-import ir.vira.salam.Contracts.MessageContract;
-import ir.vira.salam.Contracts.UserContract;
-import ir.vira.salam.DesignPatterns.Factory.RepositoryFactory;
-import ir.vira.salam.DesignPatterns.Factory.ThreadFactory;
-import ir.vira.salam.Enumerations.EventType;
-import ir.vira.salam.Enumerations.RepositoryType;
-import ir.vira.salam.Enumerations.ThreadType;
-import ir.vira.salam.Models.MessageModel;
-import ir.vira.salam.Models.UserModel;
-import ir.vira.salam.Notifications.JoinNotification;
-import ir.vira.salam.Repositories.MessageRepository;
-import ir.vira.salam.Repositories.UserRepository;
-import ir.vira.salam.Sockets.JoinEventListener;
-import ir.vira.salam.Sockets.NewMsgEventListener;
-import ir.vira.salam.Threads.ReceiveEventsThread;
-import ir.vira.salam.Threads.SendEventsThread;
-import ir.vira.utils.EncryptionAlgorithm;
-import ir.vira.utils.Utils;
 
-public class ChatActivity extends AppCompatActivity implements View.OnClickListener {
-
-    private Thread receiverThread, senderThread;
-    private EditText editTextMessage;
-    private ImageView imageViewSend;
-    private static TextView textViewMemberNum;
-    private UserContract userContract;
-    private static Activity activity;
-    private JoinEventListener joinEventListener;
-    private RecyclerView recyclerView;
-    private ChatRecyclerAdapter chatRecyclerAdapter;
-
-    public static TextView getTextViewMemberNum() {
-        return textViewMemberNum;
+    override fun onCreate(savedInstanceState: Bundle?, persistentState: PersistableBundle?) {
+        super.onCreate(savedInstanceState, persistentState)
+        initChatRecyclerView()
+        getDataFromBundle()
+        setUpThreads()
+        binding.inputLayout.chatImageSend.setOnClickListener { sendMessage() }
     }
 
-    public static Activity getActivity() {
-        return activity;
+    private fun initChatRecyclerView(){
+        val messageContract: MessageContract = MessageRepository.getInstance()
+        chatRecyclerAdapter = ChatRecyclerAdapter(messageContract.all, this)
+        binding.chatRecycler.adapter = chatRecyclerAdapter
     }
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_chat);
-        initializeViews();
-        activity = this;
+    private fun getDataFromBundle(){
+        if (intent.getBooleanExtra(IS_ADMIN, false)) {
+            val networkInformation = NetworkInformation(this)
+            val profile = getBitmap(R.drawable.ic_admin)
+            userContract.add(
+                UserModel(
+                    networkInformation.ipAddress,
+                    "Admin",
+                    profile,
+                    generateKey(EncryptionAlgorithm.AES)!!
+                )
+            )
+            initializeAdminEvents()
+        } else {
+            initializeClientEvents()
+        }
+    }
+
+    private fun setUpThreads(){
         try {
-            receiverThread = ThreadFactory.getThread(ThreadType.RECEIVER_EVENT);
-            userContract = (UserContract) RepositoryFactory.getRepository(RepositoryType.USER_REPO);
-            ((ReceiveEventsThread) receiverThread).setup(getResources().getInteger(R.integer.portNumber));
-            receiverThread.setPriority(Thread.MAX_PRIORITY);
-            receiverThread.start();
-            if (getIntent().getBooleanExtra("isAdmin", false)) {
-                Utils utils = Utils.getInstance(ChatActivity.this);
-                NetworkInformation networkInformation = new NetworkInformation(this);
-                Bitmap profile = utils.getBitmap(R.drawable.ic_admin);
-                userContract.add(new UserModel(networkInformation.getIpAddress(), "Admin", profile, Utils.generateKey(EncryptionAlgorithm.AES)));
-                initializeAdminEvents();
-            } else {
-                initializeClientEvents();
-            }
+            receiverThread = ThreadFactory.getThread(ThreadType.RECEIVER_EVENT) as ReceiveEventsThread
+            userContract = RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
+            receiverThread.setup(resources.getInteger(R.integer.portNumber))
+            receiverThread.priority = Thread.MAX_PRIORITY
+            receiverThread.start()
 
-            textViewMemberNum.setText(Utils.toPersian(" تعداد اعضا :" + userContract.getAll().size()));
-            ((ReceiveEventsThread) receiverThread).on(EventType.JOIN, joinEventListener);
-            ((ReceiveEventsThread) receiverThread).on(EventType.NEW_MSG, (NewMsgEventListener) messageModel -> {
-                runOnUiThread(() -> {
-                    chatRecyclerAdapter.newMsg(messageModel);
-                    ((LinearLayoutManager) recyclerView.getLayoutManager()).scrollToPosition(0);
-                });
-            });
-        } catch (IOException e) {
-            e.printStackTrace();
-            finish();
-        }
-        MessageContract messageContract = MessageRepository.getInstance();
-        chatRecyclerAdapter = new ChatRecyclerAdapter(messageContract.getAll(), this);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this, RecyclerView.VERTICAL, true));
-        recyclerView.setAdapter(chatRecyclerAdapter);
-    }
 
-    private void initializeViews() {
-        editTextMessage = findViewById(R.id.chatEditMessage);
-        imageViewSend = findViewById(R.id.chatImageSend);
-        textViewMemberNum = findViewById(R.id.chatTextMemberNum);
-        recyclerView = findViewById(R.id.chatRecycler);
-        imageViewSend.setOnClickListener(this::onClick);
-    }
-
-    private void initializeAdminEvents() {
-        joinEventListener = userModel -> {
-            UserContract userContract = (UserContract) RepositoryFactory.getRepository(RepositoryType.USER_REPO);
-            userContract.add(userModel);
-            JoinNotification joinNotification = new JoinNotification();
-            joinNotification.showNotification(userModel, this);
-        };
-    }
-
-    private void initializeClientEvents() {
-        joinEventListener = userModel -> {
-            UserContract userContract = (UserContract) RepositoryFactory.getRepository(RepositoryType.USER_REPO);
-            userContract.add(userModel);
-            textViewMemberNum.setText(Utils.toPersian(userContract.getAll().size() + "") + "تعداد اعضا :");
-        };
-    }
-
-    @Override
-    public void onClick(View v) {
-        if (editTextMessage.getText().length() > 0) {
-            senderThread = ThreadFactory.getThread(ThreadType.SENDER_EVENT);
-            NetworkInformation networkInformation = new NetworkInformation(this);
-            ((SendEventsThread) senderThread).setMessageModel(new MessageModel(userContract.findUserByIP(networkInformation.getIpAddress()), editTextMessage.getText().toString()), this, recyclerView);
-            senderThread.setPriority(Thread.MAX_PRIORITY);
-            senderThread.start();
-            editTextMessage.setText("");
+            binding.chatToolbar.chatTextMemberNum.setText((" تعداد اعضا :" + userContract.all.size).toPersian())
+            receiverThread.on(EventType.JOIN, joinEventListener)
+            receiverThread.on(
+                EventType.NEW_MSG,
+                NewMsgEventListener { messageModel: MessageModel? ->
+                    doOnUiThread {
+                        chatRecyclerAdapter.newMsg(messageModel)
+                        (binding.chatRecycler.layoutManager as LinearLayoutManager?)!!.scrollToPosition(0)
+                    }
+                })
+        } catch (e: IOException) {
+            e.printStackTrace()
+            finish()
         }
     }
+
+    private fun initializeAdminEvents() {
+        joinEventListener = JoinEventListener { userModel: UserModel? ->
+            val userContract: UserContract = RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
+            userContract.add(userModel)
+            val joinNotification = JoinNotification()
+            joinNotification.showNotification(userModel, this)
+        }
+    }
+
+    private fun initializeClientEvents() {
+        joinEventListener = JoinEventListener { userModel: UserModel? ->
+            val userContract: UserContract = RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
+            userContract.add(userModel)
+            binding.chatToolbar.chatTextMemberNum.text = (" تعداد اعضا :" + userContract.all.size).toPersian()
+        }
+    }
+
+    private fun sendMessage(){
+        val message = binding.inputLayout.chatEditMessage.trimString()
+        if (message.isNotBlank()) {
+            senderThread = ThreadFactory.getThread(ThreadType.SENDER_EVENT) as SendEventsThread
+            val networkInformation = NetworkInformation(this)
+            senderThread.setMessageModel(
+                MessageModel(
+                    userContract.findUserByIP(networkInformation.ipAddress),
+                    message),
+                this,
+                binding.chatRecycler
+            )
+            senderThread.priority = Thread.MAX_PRIORITY
+            senderThread.start()
+            binding.inputLayout.chatEditMessage.setText("")
+        }
+    }
+
 }

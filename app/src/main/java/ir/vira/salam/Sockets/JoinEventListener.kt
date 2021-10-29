@@ -1,8 +1,8 @@
-package ir.vira.salam.Sockets;
+package ir.vira.salam.Sockets
 
-import ir.vira.salam.Models.UserModel;
+import ir.vira.salam.Models.UserModel
 
 @FunctionalInterface
-public interface JoinEventListener extends EventListener {
-    void join(UserModel userModel);
+interface JoinEventListener : EventListener {
+    fun join(userModel: UserModel?)
 }

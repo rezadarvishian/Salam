@@ -1,88 +1,70 @@
-package ir.vira.salam.Adapters;
+package ir.vira.salam.Adapters
 
-import android.content.Context;
-import android.graphics.Bitmap;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
 
-import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.RecyclerView;
+import ir.vira.salam.Models.MessageModel
+import ir.vira.network.NetworkInformation
+import android.view.ViewGroup
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.ImageView
+import ir.vira.salam.R
+import androidx.recyclerview.widget.RecyclerView
+import ir.vira.salam.Enumerations.MessageType
+import ir.vira.salam.core.BaseViewHolder
+import ir.vira.salam.databinding.OtherMessageBinding
+import ir.vira.salam.databinding.OwnMessageBinding
 
-import com.makeramen.roundedimageview.RoundedImageView;
+class ChatRecyclerAdapter(
+    private val messageModels: MutableList<MessageModel>,
+    private val networkInformation : NetworkInformation
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-import java.util.ArrayList;
-import java.util.List;
 
-import ir.vira.network.NetworkInformation;
-import ir.vira.salam.Enumerations.MessageType;
-import ir.vira.salam.Models.MessageModel;
-import ir.vira.salam.R;
-
-public class ChatRecyclerAdapter extends RecyclerView.Adapter<ChatViewHolder> {
-
-    private List<MessageModel> messageModels;
-    private NetworkInformation networkInformation;
-
-    public ChatRecyclerAdapter(List<MessageModel> messageModels, Context context) {
-        this.messageModels = new ArrayList<>(messageModels);
-        networkInformation = new NetworkInformation(context);
+    override fun getItemViewType(position: Int): Int {
+        return if (messageModels[position].userModel.ip == networkInformation.ipAddress) MessageType.OWN.ordinal else MessageType.OTHER.ordinal
     }
 
-    @Override
-    public int getItemViewType(int position) {
-        if (messageModels.get(position).getUserModel().getIp().equals(networkInformation.getIpAddress()))
-            return MessageType.OWN.ordinal();
-        else
-            return MessageType.OTHER.ordinal();
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        return if (viewType == MessageType.OWN.ordinal) {
+            OwnMessageHolder(LayoutInflater.from(parent.context).inflate(R.layout.own_messages_item, parent, false))
+        } else {
+            OtherMessageHolder(LayoutInflater.from(parent.context).inflate(R.layout.others_messages_item, parent, false))
+        }
     }
 
-    @NonNull
-    @Override
-    public ChatViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view;
-        if (viewType == MessageType.OWN.ordinal())
-            view = LayoutInflater.from(parent.getContext()).inflate(R.layout.own_messages_item, parent, false);
-        else
-            view = LayoutInflater.from(parent.getContext()).inflate(R.layout.others_messages_item, parent, false);
-        return new ChatViewHolder(view);
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+
+        if (holder is OwnMessageHolder){
+            val message = messageModels[position]
+            if (message.userModel.profile.height != message.userModel.profile.width){
+                holder.binding.chatImageProfile.scaleType = ImageView.ScaleType.CENTER_CROP
+            }
+            holder.binding.chatImageProfile.setImageBitmap(message.userModel.profile)
+            holder.binding.chatTextName.text = message.text
+            holder.binding.chatTextText.text = message.userModel.name
+        }else if (holder is OtherMessageHolder){
+            val message = messageModels[position]
+            if (message.userModel.profile.height != message.userModel.profile.width){
+                holder.binding.chatImageProfile.scaleType = ImageView.ScaleType.CENTER_CROP
+            }
+            holder.binding.chatImageProfile.setImageBitmap(message.userModel.profile)
+            holder.binding.chatTextName.text = message.text
+            holder.binding.chatTextText.text = message.userModel.name
+        }
+
+
+
     }
 
-    @Override
-    public void onBindViewHolder(@NonNull ChatViewHolder holder, int position) {
-        if (messageModels.get(position).getUserModel().getProfile().getHeight() != messageModels.get(position).getUserModel().getProfile().getWidth())
-            holder.roundedImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        holder.roundedImageView.setImageBitmap(messageModels.get(position).getUserModel().getProfile());
-        holder.textViewText.setText(messageModels.get(position).getText());
-        holder.textViewName.setText(messageModels.get(position).getUserModel().getName());
+    override fun getItemCount() = messageModels.size
+
+
+    fun newMsg(messageModel: MessageModel) {
+        messageModels.add(0, messageModel)
+        notifyItemInserted(0)
     }
 
-    @Override
-    public int getItemCount() {
-        return messageModels.size();
-    }
-
-    public void newMsg(MessageModel messageModel) {
-        messageModels.add(0, messageModel);
-        notifyItemInserted(0);
-    }
 }
 
-class ChatViewHolder extends RecyclerView.ViewHolder {
-
-    TextView textViewName, textViewText;
-    RoundedImageView roundedImageView;
-
-    public ChatViewHolder(@NonNull View itemView) {
-        super(itemView);
-        initializeViews();
-    }
-
-    private void initializeViews() {
-        textViewName = itemView.findViewById(R.id.chatTextName);
-        textViewText = itemView.findViewById(R.id.chatTextText);
-        roundedImageView = itemView.findViewById(R.id.chatImageProfile);
-    }
-}
+class OwnMessageHolder(itemView: View) : BaseViewHolder<OwnMessageBinding>(itemView)
+class OtherMessageHolder(itemView: View) : BaseViewHolder<OtherMessageBinding>(itemView)

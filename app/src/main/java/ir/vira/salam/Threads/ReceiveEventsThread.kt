@@ -1,104 +1,93 @@
-package ir.vira.salam.Threads;
+package ir.vira.salam.Threads
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.icu.lang.UProperty;
-import android.util.Base64;
-import android.util.Log;
-import android.util.Patterns;
-import android.widget.ImageView;
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import ir.vira.salam.Contracts.UserContract
+import ir.vira.salam.DesignPatterns.Factory.RepositoryFactory
+import ir.vira.salam.Enumerations.EventType
+import ir.vira.salam.Enumerations.RepositoryType
+import ir.vira.salam.Models.MessageModel
+import ir.vira.salam.Models.UserModel
+import ir.vira.salam.Sockets.EventListener
+import ir.vira.salam.Sockets.JoinEventListener
+import ir.vira.salam.Sockets.NewMsgEventListener
+import ir.vira.utils.Cipher.decryptData
+import ir.vira.utils.EncryptionAlgorithm
+import ir.vira.utils.decodeToByte
+import org.json.JSONException
+import org.json.JSONObject
+import java.io.DataInputStream
+import java.io.IOException
+import java.net.ServerSocket
+import java.util.HashMap
+import javax.crypto.SecretKey
+import javax.crypto.spec.SecretKeySpec
 
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.w3c.dom.CDATASection;
+class ReceiveEventsThread : Thread() {
 
-import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.nio.charset.Charset;
-import java.security.KeyStore;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.regex.Pattern;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-
-import ir.vira.salam.Contracts.UserContract;
-import ir.vira.salam.DesignPatterns.Factory.RepositoryFactory;
-import ir.vira.salam.Enumerations.EventType;
-import ir.vira.salam.Enumerations.RepositoryType;
-import ir.vira.salam.Models.MessageModel;
-import ir.vira.salam.Models.UserModel;
-import ir.vira.salam.Sockets.EventListener;
-import ir.vira.salam.Sockets.JoinEventListener;
-import ir.vira.salam.Sockets.NewMsgEventListener;
-import ir.vira.utils.EncryptionAlgorithm;
-import ir.vira.utils.Utils;
-
-public class ReceiveEventsThread extends Thread {
-
-    private ServerSocket serverSocket;
-    private HashMap<EventType, EventListener> listeners;
-
-    public void setup(int port) throws IOException {
-        serverSocket = new ServerSocket(port);
-        listeners = new HashMap<>();
+    private var serverSocket: ServerSocket? = null
+    private var listeners: HashMap<EventType, EventListener>? = null
+    @Throws(IOException::class)
+    fun setup(port: Int) {
+        serverSocket = ServerSocket(port)
+        listeners = HashMap()
     }
 
-    @Override
-    public void run() {
+    override fun run() {
         while (true) {
             try {
-                Socket socket = serverSocket.accept();
-                DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
-                String data =  dataInputStream.readUTF();
-                dataInputStream.close();
-                socket.close();
-                JSONObject jsonObject = new JSONObject(data);
-                switch (EventType.valueOf(jsonObject.getString("event"))) {
-                    case JOIN:
-                        SecretKey secretKey = new SecretKeySpec(Utils.decodeToByte(jsonObject.getString("secretKey")), EncryptionAlgorithm.AES.name());
-                        String ip = Utils.decryptData(Utils.decodeToByte(jsonObject.getString("ip")), secretKey, EncryptionAlgorithm.AES);
-                        String name = Utils.decryptData(Utils.decodeToByte(jsonObject.getString("name")), secretKey, EncryptionAlgorithm.AES);
-                        String profileStr = jsonObject.getString("profile");
-                        byte[] profileStream = Utils.decodeToByte(profileStr);
-                        Bitmap profile = BitmapFactory.decodeByteArray(profileStream, 0, profileStream.length);
-                        UserModel userModel = new UserModel(ip, name, profile, secretKey);
-                        socket.close();
-                        ((JoinEventListener) listeners.get(EventType.JOIN)).join(userModel);
-                        break;
-                    case NEW_MSG:
-                        UserContract userContract = (UserContract) RepositoryFactory.getRepository(RepositoryType.USER_REPO);
-                        SecretKey key = userContract.findUserByIP(jsonObject.getString("ip")).getSecretKey();
-                        ip = jsonObject.getString("ip");
-                        String text = Utils.decryptData(Utils.decodeToByte(jsonObject.getString("text")), key, EncryptionAlgorithm.AES);
-                        MessageModel messageModel = new MessageModel(userContract.findUserByIP(ip), text);
-                        socket.close();
-                        ((NewMsgEventListener) listeners.get(EventType.NEW_MSG)).newMsg(messageModel);
-                        break;
-                    default:
-                        Exception exception = new Exception("event type invalid !");
-                        exception.printStackTrace();
-                        break;
+                val socket = serverSocket!!.accept()
+                val dataInputStream = DataInputStream(socket.getInputStream())
+                val data = dataInputStream.readUTF()
+                dataInputStream.close()
+                socket.close()
+                val jsonObject = JSONObject(data)
+                when (EventType.valueOf(jsonObject.getString("event"))) {
+                    EventType.JOIN -> {
+                        val secretKey: SecretKey = SecretKeySpec(
+                            (jsonObject.getString("secretKey")).decodeToByte(),
+                            EncryptionAlgorithm.AES.name
+                        )
+                        val ip = secretKey.decryptData(
+                            (jsonObject.getString("ip")).decodeToByte(),
+                            EncryptionAlgorithm.AES
+                        )
+                        val name = secretKey.decryptData(
+                            (jsonObject.getString("name")).decodeToByte(),
+                            EncryptionAlgorithm.AES
+                        )
+                        val profileStr: String = jsonObject.getString("profile")
+                        val profileStream: ByteArray = profileStr.decodeToByte()
+                        val profile: Bitmap = BitmapFactory.decodeByteArray(profileStream, 0, profileStream.size)
+                        val userModel = UserModel(ip!!, name!!, profile, secretKey)
+                        socket.close()
+                        (listeners!![EventType.JOIN] as JoinEventListener?)?.join(userModel)
+                    }
+                    EventType.NEW_MSG -> {
+                        val userContract: UserContract = RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
+                        val key: SecretKey = userContract.findUserByIP(jsonObject.getString("ip")).secretKey
+                        val ip = jsonObject.getString("ip")
+                        val text =  key.decryptData(
+                            (jsonObject.getString("text")).decodeToByte(),
+                            EncryptionAlgorithm.AES
+                        )
+                        val messageModel = MessageModel(userContract.findUserByIP(ip), text!!)
+                        socket.close()
+                        (listeners!![EventType.NEW_MSG] as NewMsgEventListener?)?.newMsg(messageModel)
+                    }
                 }
-            } catch (IOException | JSONException e) {
-                e.printStackTrace();
-                run();
+            } catch (e: IOException) {
+                e.printStackTrace()
+                run()
+            } catch (e: JSONException) {
+                e.printStackTrace()
+                run()
             }
         }
     }
 
-    public void on(EventType eventType, EventListener eventListener) {
-        listeners.put(eventType, eventListener);
+    fun on(eventType: EventType, eventListener: EventListener) {
+        listeners!![eventType] = eventListener
     }
 }

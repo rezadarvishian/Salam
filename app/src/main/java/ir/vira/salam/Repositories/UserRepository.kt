@@ -1,51 +1,43 @@
-package ir.vira.salam.Repositories;
+package ir.vira.salam.Repositories
 
-import java.util.ArrayList;
-import java.util.List;
+import ir.vira.salam.Contracts.UserContract
+import ir.vira.salam.Models.UserModel
+import java.util.ArrayList
 
-import ir.vira.salam.Contracts.UserContract;
-import ir.vira.salam.Models.UserModel;
-
-public class UserRepository implements UserContract {
-    private List<UserModel> userModels;
-    private static UserRepository userRepository;
-
-    private UserRepository() {
-        userModels = new ArrayList<>();
+class UserRepository : UserContract {
+    private val userModels: MutableList<UserModel>
+    override fun addAll(items: List<UserModel>?) {
+        userModels.addAll(items!!)
     }
 
-    public static UserRepository getInstance() {
-        if (userRepository == null)
-            userRepository = new UserRepository();
-        return userRepository;
+    override fun add(item: UserModel) {
+        userModels.add(item)
     }
 
-    @Override
-    public void addAll(List<UserModel> items) {
-        userModels.addAll(items);
-    }
+    override val all: List<UserModel>
+        get() = userModels
 
-    @Override
-    public void add(UserModel item) {
-        userModels.add(item);
-    }
-
-    @Override
-    public List<UserModel> getAll() {
-        return userModels;
-    }
-
-    @Override
-    public UserModel findUserByIP(String ip) {
-        for (int i = 0; i < userModels.size(); i++) {
-            if (userModels.get(i).getIp().equals(ip))
-                return userModels.get(i);
+    override fun findUserByIP(ip: String?): UserModel {
+        for (i in userModels.indices) {
+            if (userModels[i].ip == ip) return userModels[i]
         }
-        return null;
+        return userModels[0]
     }
 
-    @Override
-    public void removeUser(UserModel userModel) {
-        userModels.remove(userModel);
+    override fun removeUser(userModel: UserModel) {
+        userModels.remove(userModel)
+    }
+
+    companion object {
+        private var userRepository: UserRepository? = null
+        val instance: UserRepository?
+            get() {
+                if (userRepository == null) userRepository = UserRepository()
+                return userRepository
+            }
+    }
+
+    init {
+        userModels = ArrayList()
     }
 }

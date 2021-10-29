@@ -1,304 +1,220 @@
-package ir.vira.utils;
+package ir.vira.utils
 
-import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Point;
-import android.graphics.Typeface;
-import android.graphics.drawable.Drawable;
-import android.net.Uri;
-import android.os.Environment;
-import android.provider.MediaStore;
-import android.provider.Settings;
-import android.util.Base64;
-import android.view.Display;
-import android.view.View;
-import android.widget.ProgressBar;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import androidx.appcompat.app.ActionBarDrawerToggle;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.FileProvider;
-import androidx.drawerlayout.widget.DrawerLayout;
-
-import com.google.android.material.textfield.TextInputLayout;
-
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.security.InvalidKeyException;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.KeyGenerator;
-import javax.crypto.NoSuchPaddingException;
-import javax.crypto.SecretKey;
+import android.annotation.SuppressLint
+import androidx.appcompat.app.ActionBarDrawerToggle
+import com.google.android.material.textfield.TextInputLayout
+import android.app.Activity
+import android.content.Context
+import androidx.appcompat.app.AppCompatActivity
+import androidx.drawerlayout.widget.DrawerLayout
+import android.widget.TextView
+import androidx.core.app.ActivityCompat
+import android.content.pm.PackageManager
+import android.content.Intent
+import android.content.res.Resources
+import android.graphics.*
+import android.widget.Toast
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
+import kotlin.Throws
+import android.os.Environment
+import android.net.Uri
+import android.provider.Settings
+import android.util.Base64
+import android.view.View
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.appcompat.widget.Toolbar
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.IOException
+import java.lang.Exception
+import java.security.NoSuchAlgorithmException
+import java.text.SimpleDateFormat
+import java.util.*
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.NoSuchPaddingException
+import javax.crypto.SecretKey
 
 /**
  * This class provide some utils
  *
  * @author Ali Ghasemi
  */
-public class Utils {
 
-    private Context context;
-    private ActionBarDrawerToggle actionBarDrawerToggle;
-    private static File tempImage = null;
-    private static Utils utils;
-    private static final String UNICODE_FORMAT = "utf-8";
-    private static SecretKey secretKey;
-    private static Cipher cipher;
 
-    private Utils(Context context) {
-        this.context = context;
+fun Activity.getBitmap(imageId: Int): Bitmap {
+    val drawable = AppCompatResources.getDrawable(this, imageId)
+    val canvas = Canvas()
+    val bitmap = Bitmap.createBitmap(
+        drawable!!.intrinsicWidth,
+        drawable.intrinsicHeight,
+        Bitmap.Config.ARGB_8888
+    )
+    canvas.setBitmap(bitmap)
+    drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
+    drawable.draw(canvas)
+    return bitmap
+}
+
+fun View.setFont(fontPath: String?) {
+    val typeface = Typeface.createFromAsset(this.context.assets, fontPath)
+    //When set inputType=textPassword fontFamily not work for textInputLayout so set font programmatically solve this problem .
+    if (this is TextInputLayout) this.typeface = typeface
+}
+
+fun Activity.changeLayoutDirection(direction: Int) {
+    this.window.decorView.layoutDirection = direction
+}
+
+
+fun setToolbar(
+    toolbar: Toolbar?,
+    activity: AppCompatActivity,
+    drawerLayout: DrawerLayout,
+    colorArrow: Int
+) {
+    var actionBarDrawerToggle: ActionBarDrawerToggle? = null
+    activity.setSupportActionBar(toolbar)
+    activity.title = ""
+    actionBarDrawerToggle = ActionBarDrawerToggle(activity, drawerLayout, 0, 0)
+    drawerLayout.addDrawerListener(actionBarDrawerToggle!!)
+    actionBarDrawerToggle!!.syncState()
+    activity.supportActionBar!!.setDisplayHomeAsUpEnabled(true)
+    activity.supportActionBar!!.setHomeButtonEnabled(true)
+    actionBarDrawerToggle!!.drawerArrowDrawable.color = colorArrow
+}
+
+fun AppCompatActivity.setSubToolbar(
+    toolbar: Toolbar,
+    title: String?,
+    direction: Int,
+    homeIndicator: Int,
+    textViewTitleID: Int
+) {
+    toolbar.layoutDirection = direction
+    this.title = ""
+    this.setSupportActionBar(toolbar)
+    (toolbar.findViewById<View>(textViewTitleID) as TextView).text = title
+    this.supportActionBar!!.setDisplayHomeAsUpEnabled(true)
+    this.supportActionBar!!.setHomeAsUpIndicator(homeIndicator)
+}
+
+fun Activity.checkPermission(permission: String, message: String, requestCode: Int): Boolean {
+    val sharedPreferences = this.getSharedPreferences("permissionsList", Context.MODE_PRIVATE)
+    return if (ActivityCompat.checkSelfPermission(
+            this,
+            permission
+        ) == PackageManager.PERMISSION_DENIED
+    ) {
+        if (!sharedPreferences.contains(requestCode.toString())) {
+            ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
+            val editor = sharedPreferences.edit()
+            editor.putString(requestCode.toString(), requestCode.toString())
+            editor.apply()
+        } else if (ActivityCompat.shouldShowRequestPermissionRationale(this, permission))
+            ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
+        else if (message.isNotEmpty()) {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.data = Uri.parse("package:" + this.packageName)
+            this.startActivity(intent)
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
+        false
+    } else true
+}
+
+
+fun Activity.takeImage(imageCaptureRequestCode: Int):String? {
+    val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+    return try {
+        val image = createTempImageFile()
+        val uri = FileProvider.getUriForFile(this, "image-capture", image)
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, uri)
+        this.startActivityForResult(intent, imageCaptureRequestCode)
+        null
+    } catch (e: IOException) {
+        e.printStackTrace()
+        "در گرفتن عکس مشکلی پیش آمد"
     }
 
-    public static Utils getInstance(Context context) {
-        if (utils == null)
-            utils = new Utils(context);
-        return utils;
-    }
+}
 
-    public Bitmap getBitmap(int imageId) {
-        Drawable drawable = context.getResources().getDrawable(imageId);
-        Canvas canvas = new Canvas();
-        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
-        canvas.setBitmap(bitmap);
-        drawable.setBounds(0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
-        drawable.draw(canvas);
-        return bitmap;
-    }
+@SuppressLint("SimpleDateFormat")
+@Throws(IOException::class)
+private fun Activity.createTempImageFile(): File {
+    var timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+    timeStamp = "JPEG_$timeStamp"
+    return File.createTempFile(
+        timeStamp,
+        ".jpg",
+        this.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+    )
+}
 
-    public void setFont(String fontPath, View view) {
-        Typeface typeface = Typeface.createFromAsset(context.getAssets(), fontPath);
-        //When set inputType=textPassword fontFamily not work for textInputLayout so set font programmatically solve this problem .
-        if (view instanceof TextInputLayout)
-            ((TextInputLayout) view).setTypeface(typeface);
-    }
+fun Activity.chooseImageFromGallery(chooseImageFromGalleryRequestCode: Int) {
+    val intent = Intent(Intent.ACTION_PICK)
+    intent.type = "image/jpg"
+    this.startActivityForResult(intent, chooseImageFromGalleryRequestCode)
+}
 
-    @Deprecated
-    public void changeLayoutDirection(int direction) {
-        Activity activity = (Activity) context;
-        activity.getWindow().getDecorView().setLayoutDirection(direction);
-    }
+fun getScreenSize(): HashMap<String, Int> {
+    val screenSize = HashMap<String, Int>()
+    screenSize["Width"] = Resources.getSystem().displayMetrics.widthPixels
+    screenSize["Height"] =Resources.getSystem().displayMetrics.heightPixels
+    return screenSize
+}
 
-    public void setToolbar(Toolbar toolbar, AppCompatActivity activity, DrawerLayout drawerLayout, int colorArrow) {
-        activity.setSupportActionBar(toolbar);
-        activity.setTitle("");
-        actionBarDrawerToggle = new ActionBarDrawerToggle(activity, drawerLayout, 0, 0);
-        drawerLayout.addDrawerListener(actionBarDrawerToggle);
-        actionBarDrawerToggle.syncState();
-        activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        activity.getSupportActionBar().setHomeButtonEnabled(true);
-        actionBarDrawerToggle.getDrawerArrowDrawable().setColor(colorArrow);
-    }
-
-    public void setSubToolbar(Toolbar toolbar, String title, AppCompatActivity activity, int direction, int homeIndicator, int textViewTitleID) {
-        toolbar.setLayoutDirection(direction);
-        activity.setTitle("");
-        activity.setSupportActionBar(toolbar);
-        ((TextView) toolbar.findViewById(textViewTitleID)).setText(title);
-        activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        activity.getSupportActionBar().setHomeAsUpIndicator(homeIndicator);
-    }
-
-    public ActionBarDrawerToggle getActionBarDrawerToggle() {
-        return actionBarDrawerToggle;
-    }
-
-    public boolean checkPermission(String permission, String message, int requestCode, Activity activity) {
-        SharedPreferences sharedPreferences = context.getSharedPreferences("permissionsList", Context.MODE_PRIVATE);
-        if (ActivityCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_DENIED) {
-            if (!sharedPreferences.contains(String.valueOf(requestCode))) {
-                ActivityCompat.requestPermissions(activity, new String[]{permission}, requestCode);
-                SharedPreferences.Editor editor = sharedPreferences.edit();
-                editor.putString(String.valueOf(requestCode), String.valueOf(requestCode));
-                editor.commit();
-            } else if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permission))
-                ActivityCompat.requestPermissions(activity, new String[]{permission}, requestCode);
-                // This statement work when permission not very important
-            else if (message.length() > 0) {
-                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                intent.setData(Uri.parse("package:" + context.getPackageName()));
-                context.startActivity(intent);
-                AdvancedToast.makeText(context, message, Toast.LENGTH_LONG).show();
-            }
-            return false;
+fun String.isNationalCodeValid(): Boolean {
+    return if (this.length == 10) {
+        var mul: Int = 0
+        for (i in this.length - 2 downTo 0) {
+            mul += ((this[i].toString() + "").toByte() * (10 - i))
+        }
+        val remain: Short = (mul % 11).toShort()
+        if (remain < 2) {
+            remain == this[this.length - 1].toShort()
         } else {
-            return true;
+            (this[this.length - 1].toString() + "").toByte().toInt() == 11 - remain
         }
-    }
+    } else false
+}
 
-    public void takeImage(Activity activity, int imageCaptureRequestCode) {
-        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        try {
-            tempImage = createTempImageFile();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        if (tempImage != null) {
-            Uri uri = FileProvider.getUriForFile(context, "image-capture", tempImage);
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
-            activity.startActivityForResult(intent, imageCaptureRequestCode);
-        } else
-            AdvancedToast.makeText(context, "در گرفتن عکس مشکلی پیش آمده است .", Toast.LENGTH_LONG).show();
-    }
+fun Bitmap.getEncodeImage(): String {
+    val byteArrayOutputStream = ByteArrayOutputStream()
+    this.compress(Bitmap.CompressFormat.JPEG, 80, byteArrayOutputStream)
+    return Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.DEFAULT)
+}
 
-    public void chooseImageFromGallery(Activity activity, int chooseImageFromGalleryRequestCode) {
-        Intent intent = new Intent(Intent.ACTION_PICK);
-        intent.setType("image/jpg");
-        activity.startActivityForResult(intent, chooseImageFromGalleryRequestCode);
-    }
+fun String.getBitmap(): Bitmap {
+    val bytes = Base64.decode(this, Base64.DEFAULT)
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+}
 
-    private File createTempImageFile() throws IOException {
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        timeStamp = "JPEG_" + timeStamp;
-        File tempImage = File.createTempFile(timeStamp, ".jpg", context.getExternalFilesDir(Environment.DIRECTORY_PICTURES));
-        return tempImage;
-    }
+fun ByteArray.encodeToString(): String {
+    return Base64.encodeToString(this, Base64.DEFAULT)
+}
 
-    public static String getEncodeImage(Bitmap bitmap) {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, byteArrayOutputStream);
-        String encodedStr = Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.DEFAULT);
-        return encodedStr;
+fun String.toPersian(): String {
+    var text = this
+    val nums = arrayOf(
+        charArrayOf('0', '۰'),
+        charArrayOf('1', '۱'),
+        charArrayOf('2', '۲'),
+        charArrayOf('3', '۳'),
+        charArrayOf('4', '۴'),
+        charArrayOf('5', '۵'),
+        charArrayOf('6', '۶'),
+        charArrayOf('7', '۷'),
+        charArrayOf('8', '۸'),
+        charArrayOf('9', '۹')
+    )
+    for (i in nums.indices) {
+        text = text.replace(nums[i][0], nums[i][1])
     }
+    return text
+}
 
-    public static Bitmap getBitmap(String encodedImage) {
-        byte[] bytes = Base64.decode(encodedImage, Base64.DEFAULT);
-        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-        return bitmap;
-    }
-
-    public HashMap<String, Integer> getScreenSize(Activity activity) {
-        HashMap<String, Integer> screenSize = new HashMap<>();
-        Display display = activity.getWindowManager().getDefaultDisplay();
-        Point point = new Point();
-        display.getSize(point);
-        screenSize.put("Width", point.x);
-        screenSize.put("Height", point.y);
-        return screenSize;
-    }
-
-    public static Uri getTempImage() {
-        return Uri.fromFile(tempImage);
-    }
-
-    public boolean isNationalCodeValid(String nationalCode) {
-        if (nationalCode.length() == 10) {
-            short mul = 0, remain;
-            for (int i = nationalCode.length() - 2; i >= 0; i--) {
-                mul += (Byte.parseByte(nationalCode.charAt(i) + "") * (10 - i));
-            }
-            remain = (short) (mul % 11);
-            if (remain < 2) {
-                if (remain == nationalCode.charAt(nationalCode.length() - 1))
-                    return true;
-                else
-                    return false;
-            } else {
-                if ((Byte.parseByte(nationalCode.charAt(nationalCode.length() - 1) + "")) == 11 - remain)
-                    return true;
-                else
-                    return false;
-            }
-        } else
-            return false;
-    }
-
-    public static String encodeToString(byte[] data) {
-        return Base64.encodeToString(data, Base64.DEFAULT);
-    }
-
-    public static String toPersian(String text) {
-        char[][] nums = new char[][]{{'0', '۰'}, {'1', '۱'}, {'2', '۲'}, {'3', '۳'}, {'4', '۴'}, {'5', '۵'}, {'6', '۶'}, {'7', '۷'}, {'8', '۸'}, {'9', '۹'}};
-        for (int i = 0; i < nums.length; i++) {
-            text = text.replace(nums[i][0], nums[i][1]);
-        }
-        return text;
-    }
-
-    public static byte[] decodeToByte(String data) {
-        return Base64.decode(data, Base64.DEFAULT);
-    }
-
-    public SecretKey generateKey(EncryptionAlgorithm encryptionAlgorithm, int keySize) {
-        try {
-            if (secretKey == null) {
-                KeyGenerator keyGenerator = KeyGenerator.getInstance(encryptionAlgorithm.name());
-                keyGenerator.init(keySize);
-                secretKey = keyGenerator.generateKey();
-            }
-            return secretKey;
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static SecretKey generateKey(EncryptionAlgorithm encryptionAlgorithm) {
-        try {
-            if (secretKey == null) {
-                KeyGenerator keyGenerator = KeyGenerator.getInstance(encryptionAlgorithm.name());
-                secretKey = keyGenerator.generateKey();
-            }
-            return secretKey;
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    private static Cipher getCipher(EncryptionAlgorithm encryptionAlgorithm) {
-        try {
-            if (cipher == null)
-                cipher = Cipher.getInstance(encryptionAlgorithm.name());
-            return cipher;
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return null;
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static byte[] encryptData(String data, EncryptionAlgorithm encryptionAlgorithm) {
-        try {
-            byte[] dataToEncrypt = data.getBytes(UNICODE_FORMAT);
-            getCipher(encryptionAlgorithm).init(Cipher.ENCRYPT_MODE, generateKey(encryptionAlgorithm));
-            return cipher.doFinal(dataToEncrypt);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static String decryptData(byte[] dataToDecrypt, SecretKey secretKey, EncryptionAlgorithm encryptionAlgorithm) {
-        try {
-            getCipher(encryptionAlgorithm).init(Cipher.DECRYPT_MODE, secretKey);
-            byte[] dataDecrypted = cipher.doFinal(dataToDecrypt);
-            return new String(dataDecrypted);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
+fun String.decodeToByte(): ByteArray {
+    return Base64.decode(this, Base64.DEFAULT)
 }
