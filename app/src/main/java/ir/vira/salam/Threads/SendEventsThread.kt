@@ -32,7 +32,7 @@ class SendEventsThread : Thread() {
 
     fun setMessageModel(
         messageModel: MessageModel?,
-        context: Context?,
+        context: Context,
         recyclerView: RecyclerView?
     ) {
         this.messageModel = messageModel
@@ -47,7 +47,7 @@ class SendEventsThread : Thread() {
         val jsonObject = JSONObject()
         val userContract: UserContract =
             RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
-        val networkInformation = NetworkInformation(context)
+        val networkInformation = NetworkInformation(context!!)
         try {
             jsonObject.put("event", "NEW_MSG")
             jsonObject.put("ip", messageModel!!.userModel.ip)
@@ -55,12 +55,11 @@ class SendEventsThread : Thread() {
 
 
             for (userModel in userContract.all) {
-                if (userModel.ip != networkInformation.getIpAddress()) {
-                    if (userModel.ip == "0.0.0.0") socket = Socket(
-                        networkInformation.getServerIpAddress(),
+                if (userModel.ip != networkInformation.ipAddress) {
+                    socket = if (userModel.ip == "0.0.0.0") Socket(
+                        networkInformation.serverIpAddress,
                         context!!.resources.getInteger(R.integer.portNumber)
-                    ) else socket =
-                        Socket(userModel.ip, context!!.resources.getInteger(R.integer.portNumber))
+                    ) else Socket(userModel.ip, context!!.resources.getInteger(R.integer.portNumber))
                     dataOutputStream = DataOutputStream(socket.getOutputStream())
                     dataOutputStream.writeUTF(jsonObject.toString())
                     dataOutputStream.flush()

@@ -52,8 +52,8 @@ class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
     private val viewModel: MainViewModel by viewModels()
     private lateinit var networkInformation: NetworkInformation
 
-    override fun onCreate(savedInstanceState: Bundle?, persistentState: PersistableBundle?) {
-        super.onCreate(savedInstanceState, persistentState)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         observeViewModel()
         networkInformation = NetworkInformation(this)
         binding.mainEditIP.setText(networkInformation.ipAddress)
@@ -65,13 +65,13 @@ class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
                     0 -> chooseImageFromGallery(resources.getInteger(R.integer.chooseImageFromGallery))
                     1 -> takeImage(resources.getInteger(R.integer.takeImage))
                 }
-            }.show()
+            }
+            alertDialog.show()
         }
 
         binding.mainBtnSendRequest.setOnClickListener {
             if (validateUserInputData()) sendRequest()
         }
-
     }
 
     private fun observeViewModel() {
@@ -112,8 +112,8 @@ class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
 
         val thread = ThreadFactory.getThread(ThreadType.CONNECT_TO_SERVER)
 
-        val socketListener = SocketListener { socket: Socket ->
-            if (socket.isConnected) {
+        val socketListener = SocketListener { socket: Socket? ->
+            if (socket!!.isConnected) {
                 try {
 
                     val encryptedIp = networkInformation.ipAddress.encryptData( EncryptionAlgorithm.AES)?.encodeToString()
@@ -122,15 +122,14 @@ class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
 
                     if (encryptedIp==null||encryptedName==null||encryptedSecretKey==null){
                         showToast("در رمزنگاری اطلاعات مشکلی به وجود آمد لطفا برنامه را ببنید و دوباره باز کنید")
-                        return@SocketListener
                     }
 
 
                     val joinRequest = JoinRequest(
                         event = "JOIN",
-                        ip = encryptedIp,
-                        name = encryptedName,
-                        secretKey = encryptedSecretKey,
+                        ip = encryptedIp!!,
+                        name = encryptedName!!,
+                        secretKey = encryptedSecretKey!!,
                         profile = viewModel.userProfile()
                     )
 
@@ -184,7 +183,7 @@ class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
                             val decodedText = jsonArrayUsers.getJSONObject(i).getString("text").decodeToByte()
                             val text = secretKey.decryptData(decodedText,EncryptionAlgorithm.AES)
 
-                            val messageModel = MessageModel(userContract.findUserByIP(ip), text)
+                            val messageModel = MessageModel(userContract.findUserByIP(ip), text!!)
                             messageModels.add(messageModel)
                         }
 
@@ -197,9 +196,9 @@ class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
 
                     } else {
                         doOnUiThread {
-                           binding.mainBtnSendRequest.setVisible()
-                           showToast(resources.getString(R.string.msg_admin_did_not_allowed))
-                       }
+                            binding.mainBtnSendRequest.setVisible()
+                            showToast(resources.getString(R.string.msg_admin_did_not_allowed))
+                        }
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -208,7 +207,7 @@ class MainActivity : BaseActivity<MainActivityBinding>(R.layout.activity_main) {
                 binding.mainBtnSendRequest.setVisible()
                 showToast(resources.getString(R.string.problem_in_connect_to_admin))
             }
-        }
+        } as (Socket?) -> Unit
 
 
 

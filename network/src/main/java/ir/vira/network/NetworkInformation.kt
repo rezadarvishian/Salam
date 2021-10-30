@@ -1,57 +1,53 @@
-package ir.vira.network;
+package ir.vira.network
 
-import android.content.Context;
-import android.net.ConnectivityManager;
-import android.net.wifi.WifiManager;
-import android.text.format.Formatter;
-
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import android.net.wifi.WifiManager
+import android.net.ConnectivityManager
+import kotlin.Throws
+import android.annotation.SuppressLint
+import android.app.Application
+import android.content.Context
+import android.text.format.Formatter
+import ir.vira.network.NetworkInformation
+import java.lang.reflect.InvocationTargetException
 
 /**
  * This class for get some information about network like ip address or server ip address and etc .
  *
  * @author Ali Ghasemi
  */
-public class NetworkInformation {
-    private Context context;
-    private WifiManager wifiManager;
-    private ConnectivityManager connectivityManager;
 
-    public NetworkInformation(Context context) {
-        this.context = context;
-        wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
-        connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-    }
+class NetworkInformation(context: Context) {
 
-    public String getIpAddress() {
-        return Formatter.formatIpAddress(wifiManager.getConnectionInfo().getIpAddress());
-    }
 
-    public String getServerIpAddress() {
-        return Formatter.formatIpAddress(wifiManager.getDhcpInfo().serverAddress);
-    }
+    private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    public boolean isConnectedToNetwork() {
-        if (getIpAddress().equals("0.0.0.0"))
-            return false;
-        else
-            return true;
-    }
+    val ipAddress: String
+        get() = Formatter.formatIpAddress(wifiManager.connectionInfo.ipAddress)
+    val serverIpAddress: String
+        get() = Formatter.formatIpAddress(wifiManager.dhcpInfo.serverAddress)
+    val isConnectedToNetwork: Boolean
+        get() = ipAddress != "0.0.0.0"
 
-    public boolean isMobileDataEnabled() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        Method method = connectivityManager.getClass().getDeclaredMethod("getMobileDataEnabled");
-        method.setAccessible(true);
-        return (boolean) method.invoke(connectivityManager);
-    }
 
-    public boolean isWifiEnabled() {
-        return wifiManager.isWifiEnabled();
-    }
+    val isMobileDataEnabled: Boolean
+        get() {
+            @SuppressLint("DiscouragedPrivateApi")
+            val method = connectivityManager.javaClass.getDeclaredMethod("getMobileDataEnabled")
+            method.isAccessible = true
+            return method.invoke(connectivityManager) as Boolean
+        }
 
-    public boolean isWifiAccessPointEnabled() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        Method method = wifiManager.getClass().getDeclaredMethod("isWifiApEnabled");
-        method.setAccessible(true);
-        return (boolean) method.invoke(wifiManager);
-    }
+
+    val isWifiEnabled: Boolean
+        get() = wifiManager.isWifiEnabled
+
+
+    val isWifiAccessPointEnabled: Boolean
+        get() {
+            val method = wifiManager.javaClass.getDeclaredMethod("isWifiApEnabled")
+            method.isAccessible = true
+            return method.invoke(wifiManager) as Boolean
+        }
+
 }

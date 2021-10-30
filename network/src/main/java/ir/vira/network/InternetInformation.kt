@@ -1,29 +1,29 @@
-package ir.vira.network;
+package ir.vira.network
 
-import android.content.Context;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
+import android.net.wifi.WifiManager
+import android.net.ConnectivityManager
+import kotlin.Throws
+import android.annotation.SuppressLint
+import android.content.Context
+import ir.vira.network.NetworkInformation
+import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 
 /**
  * This class for get some information about internet connection .
  *
  * @author Ali Ghasemi
  */
-public class InternetInformation {
+object InternetInformation {
 
-    public static boolean isConnectedToInternet(Context context) throws IOException, InterruptedException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        NetworkInformation networkInformation = new NetworkInformation(context);
-        if (networkInformation.isWifiEnabled() || networkInformation.isMobileDataEnabled()) {
-            Runtime runtime = Runtime.getRuntime();
-            Process process = runtime.exec("ping -c 1 8.8.8.8");
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                return true;
-            } else {
-                return false;
-            }
-        } else
-            return false;
+
+    fun isConnectedToInternet(context: Context): Boolean {
+        val networkInformation = NetworkInformation(context)
+        return if (networkInformation.isWifiEnabled || networkInformation.isMobileDataEnabled) {
+            val runtime = Runtime.getRuntime()
+            val process = runtime.exec("ping -c 1 8.8.8.8")
+            val exitCode = process.waitFor()
+            exitCode == 0
+        } else false
     }
 }

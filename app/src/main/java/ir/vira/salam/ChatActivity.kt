@@ -50,8 +50,9 @@ class ChatActivity : BaseActivity<ChatActivityBinding>(R.layout.activity_chat) {
     }
 
     private fun initChatRecyclerView(){
-        val messageContract: MessageContract = MessageRepository.getInstance()
-        chatRecyclerAdapter = ChatRecyclerAdapter(messageContract.all, this)
+        val messageContract: MessageContract = MessageRepository.instance as MessageContract
+        val network = NetworkInformation(this)
+        chatRecyclerAdapter = ChatRecyclerAdapter(messageContract.all.toMutableList(), network)
         binding.chatRecycler.adapter = chatRecyclerAdapter
     }
 
@@ -83,13 +84,17 @@ class ChatActivity : BaseActivity<ChatActivityBinding>(R.layout.activity_chat) {
 
 
             binding.chatToolbar.chatTextMemberNum.setText((" تعداد اعضا :" + userContract.all.size).toPersian())
-            receiverThread.on(EventType.JOIN, joinEventListener)
+            receiverThread.on(EventType.JOIN, joinEventListener!!)
             receiverThread.on(
                 EventType.NEW_MSG,
-                NewMsgEventListener { messageModel: MessageModel? ->
-                    doOnUiThread {
-                        chatRecyclerAdapter.newMsg(messageModel)
-                        (binding.chatRecycler.layoutManager as LinearLayoutManager?)!!.scrollToPosition(0)
+                object : NewMsgEventListener {
+                    override fun newMsg(messageModel: MessageModel?) {
+                        doOnUiThread {
+                            chatRecyclerAdapter.newMsg(messageModel!!)
+                            (binding.chatRecycler.layoutManager as LinearLayoutManager?)!!.scrollToPosition(
+                                0
+                            )
+                        }
                     }
                 })
         } catch (e: IOException) {
@@ -99,19 +104,25 @@ class ChatActivity : BaseActivity<ChatActivityBinding>(R.layout.activity_chat) {
     }
 
     private fun initializeAdminEvents() {
-        joinEventListener = JoinEventListener { userModel: UserModel? ->
-            val userContract: UserContract = RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
-            userContract.add(userModel)
-            val joinNotification = JoinNotification()
-            joinNotification.showNotification(userModel, this)
+        joinEventListener = object : JoinEventListener {
+            override fun join(userModel: UserModel?) {
+                val userContract: UserContract =
+                    RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
+                userContract.add(userModel!!)
+                val joinNotification = JoinNotification()
+                joinNotification.showNotification(userModel, this@ChatActivity)
+            }
         }
     }
 
     private fun initializeClientEvents() {
-        joinEventListener = JoinEventListener { userModel: UserModel? ->
-            val userContract: UserContract = RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
-            userContract.add(userModel)
-            binding.chatToolbar.chatTextMemberNum.text = (" تعداد اعضا :" + userContract.all.size).toPersian()
+        joinEventListener = object : JoinEventListener {
+            override fun join(userModel: UserModel?) {
+                val userContract: UserContract =
+                    RepositoryFactory.getRepository(RepositoryType.USER_REPO) as UserContract
+                userContract.add(userModel!!)
+                binding.chatToolbar.chatTextMemberNum.text = (" تعداد اعضا :" + userContract.all.size).toPersian()
+            }
         }
     }
 
